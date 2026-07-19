@@ -13,6 +13,7 @@ interface LeafletMapProps {
   filterType: 'all' | 'shelter' | 'hospital' | 'volunteer' | 'case';
   showWeatherOverlay: boolean;
   onMarkerClick?: (type: 'case' | 'volunteer' | 'shelter', id: string) => void;
+  darkMode?: boolean;
 }
 
 export const LeafletMap: React.FC<LeafletMapProps> = ({
@@ -25,7 +26,8 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
   selectedCase,
   filterType,
   showWeatherOverlay,
-  onMarkerClick
+  onMarkerClick,
+  darkMode = false
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -50,8 +52,10 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
 
     mapRef.current = map;
 
-    // Use light tile layouts exclusively
-    const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    // Use dark mode or light Voyager tiles based on darkMode
+    const tileUrl = darkMode
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
     L.tileLayer(tileUrl, {
       maxZoom: 19
@@ -149,7 +153,7 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
         if (filterType === 'shelter' && shelter.type === 'hospital') return;
 
         const isHospital = shelter.type === 'hospital';
-        const color = isHospital ? '#db2777' : '#2563eb'; // pink for hospital, blue for shelter
+
         const iconHtml = `
           <div class="flex items-center justify-center w-9 h-9 rounded-full border-2 border-white text-white font-bold shadow-lg ${
             isHospital ? 'bg-pink-600' : 'bg-blue-600'

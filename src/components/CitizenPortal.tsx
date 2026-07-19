@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { 
-  User, Home, MapPin, Bell, Phone, Heart, History, LogOut, Sun, Moon, 
+  User, Home, MapPin, Bell, Phone, Heart, History, LogOut, 
   AlertTriangle, Thermometer, Droplet, Wind, Waves, TrendingUp, ShieldCheck, 
-  Send, Compass, HelpCircle, PhoneCall, Plus, Trash2, CheckCircle2, Clock, 
-  UserCheck, AlertCircle, MessageSquare, Mail, MessageCircle, Info
+  Send, Compass, PhoneCall, Plus, Trash2, CheckCircle2, Clock, 
+  MessageSquare, MessageCircle
 } from 'lucide-react';
-import type { Citizen, Alert, Case, Shelter, WeatherData } from '../types';
+import type { Citizen, Alert, Case, Shelter, WeatherData, EmergencyMessage } from '../types';
 import LeafletMap from './LeafletMap';
+import ConnectionStatus from './ConnectionStatus';
+import CitizenChat from './CitizenChat';
 
 interface CitizenPortalProps {
   citizen: Citizen;
@@ -18,6 +20,11 @@ interface CitizenPortalProps {
   shelters: Shelter[];
   weather: WeatherData;
   onLogout: () => void;
+  // NEW PROPS FOR SECURE SUPABASE FLOW:
+  chatMessages: EmergencyMessage[];
+  onSendMessage: (text: string) => Promise<any>;
+  onUpdateStatus: (action: 'SAFE' | 'HELP' | 'MEDICAL' | 'EVACUATION', notes?: string) => Promise<any>;
+  connectionStatus: 'realtime' | 'polling' | 'connecting';
 }
 
 export const CitizenPortal: React.FC<CitizenPortalProps> = ({
@@ -26,12 +33,16 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
   alerts,
   setAlerts,
   cases,
-  setCases,
+  setCases: _setCases,
   shelters,
   weather,
-  onLogout
+  onLogout,
+  chatMessages,
+  onSendMessage,
+  onUpdateStatus,
+  connectionStatus
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'shelters' | 'cases' | 'history' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'shelters' | 'cases' | 'history' | 'profile'>('dashboard');
   const [safetyResponse, setSafetyResponse] = useState<'safe' | 'assist' | 'family' | 'evac' | 'no-resp' | null>(null);
   const [responseNotes, setResponseNotes] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
@@ -65,76 +76,22 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
       return;
     }
 
-    const needsRescue = safetyResponse === 'assist' || safetyResponse === 'family' || safetyResponse === 'evac';
-    const statusText = {
-      safe: "I'm Safe: No assistance needed.",
-      assist: "Need Assistance: Requiring ground rescue.",
-      family: "Family Needs Help: Children/Elderly require transport.",
-      evac: "Evacuating: In progress but road conditions are poor.",
-      'no-resp': "Cannot Respond: High stress."
-    }[safetyResponse];
+    let statusAction: 'SAFE' | 'HELP' | 'MEDICAL' | 'EVACUATION' = 'SAFE';
+    if (safetyResponse === 'safe') statusAction = 'SAFE';
+    else if (safetyResponse === 'assist') statusAction = 'HELP';
+    else if (safetyResponse === 'family') statusAction = 'HELP';
+    else if (safetyResponse === 'evac') statusAction = 'EVACUATION';
+    else if (safetyResponse === 'no-resp') statusAction = 'HELP';
 
-    // Update safety response in citizen profile
-    triggerToast('Safety response logged in command center database.');
-
-    if (needsRescue) {
-      // Check if case already exists for this citizen
-      const existingCase = cases.find(c => c.citizenId === citizen.id && c.status !== 'closed');
-      
-      if (existingCase) {
-        // Append note to existing case
-        setCases(prev => prev.map(c => {
-          if (c.id === existingCase.id) {
-            return {
-              ...c,
-              notes: [...c.notes, `User updated response: ${statusText}. Note: ${responseNotes || 'None'}`],
-              latestResponse: statusText,
-              priority: safetyResponse === 'family' || safetyResponse === 'assist' ? 'critical' : 'monitor'
-            };
-          }
-          return c;
-        }));
-        triggerToast('Active case updated with your latest response details.');
-      } else {
-        // Create a new Case
-        const newCaseId = `CASE-${Math.floor(1000 + Math.random() * 9000)}`;
-        const newCase: Case = {
-          id: newCaseId,
-          citizenId: citizen.id,
-          citizenName: citizen.name,
-          status: 'new',
-          priority: safetyResponse === 'family' || safetyResponse === 'assist' ? 'critical' : 'monitor',
-          location: citizen.address,
-          lat: citizen.lat,
-          lng: citizen.lng,
-          createdTime: new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC',
-          latestResponse: statusText + (responseNotes ? ` - "${responseNotes}"` : ''),
-          timeline: [
-            { status: 'new', time: 'Just Now', description: 'Emergency case triggered by user safety response form.' }
-          ],
-          notes: [
-            `Initial user response notes: ${responseNotes || 'No notes added.'}`,
-            `Elevation: ${citizen.elevation}m, Distance to river: ${citizen.distanceToRiver}m`
-          ],
-          riskFactors: [
-            `Distance to River: ${citizen.distanceToRiver}m`,
-            `Elevation: ${citizen.elevation}m`,
-            `Risk Score: ${citizen.riskScore}%`
-          ],
-          weatherSnapshot: {
-            temp: weather.temp,
-            rainfall: weather.rainfall,
-            riverLevel: weather.riverLevel
-          }
-        };
-        setCases(prev => [newCase, ...prev]);
-        triggerToast(`Emergency Dispatch triggered! Case ${newCaseId} created.`, 'warning');
-      }
-    }
-
-    // Reset safety form selection
-    setSafetyResponse(null);
-    setResponseNotes('');
+    onUpdateStatus(statusAction, responseNotes)
+      .then(() => {
+        triggerToast('Safety response logged in command center database.');
+        setSafetyResponse(null);
+        setResponseNotes('');
+      })
+      .catch((err) => {
+        triggerToast(`Failed to update safety response: ${err.message}`, 'warning');
+      });
   };
 
   // Add Family Member
@@ -228,6 +185,23 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
           >
             <Home className="h-4 w-4" />
             <span>Crisis Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold tracking-wide transition-all ${
+              activeTab === 'chat'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-high'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <MessageSquare className="h-4 w-4" />
+              <span>Emergency Chat</span>
+            </div>
+            <span className={`w-2 h-2 rounded-full ${
+              connectionStatus === 'realtime' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+            }`}></span>
           </button>
 
           <button
@@ -730,6 +704,22 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
 
               </div>
 
+            </div>
+          )}
+
+          {/* TAB: EMERGENCY CHAT */}
+          {activeTab === 'chat' && (
+            <div className="h-[calc(100vh-12rem)] flex flex-col">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-primary">Emergency Response Chat</h2>
+                  <p className="text-xs text-on-surface-variant">Direct encrypted communication with Dispatch and Responders.</p>
+                </div>
+                <ConnectionStatus status={connectionStatus} />
+              </div>
+              <div className="flex-1 min-h-0">
+                <CitizenChat messages={chatMessages} onSendMessage={onSendMessage} />
+              </div>
             </div>
           )}
 

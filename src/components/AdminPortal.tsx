@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Users, AlertCircle, ShieldAlert, Heart, Settings,
-  Map, Activity, BellRing, Database, ChevronRight, Search,
-  X, Shield, Plus, FileText, Download, Clock, Truck,
-  CheckCircle2, AlertTriangle, Layers, Info
+  Users, ShieldAlert, Settings,
+  Map, Activity, BellRing, Database, Search,
+  X, Shield, Plus, Truck,
+  CheckCircle2, MessageSquare
 } from 'lucide-react';
-import type { Citizen, Alert, Case, Volunteer, Shelter, SystemLog, WeatherData } from '../types';
+import type { Citizen, Alert, Case, Volunteer, Shelter, SystemLog, WeatherData, SupabaseCitizen, EmergencyMessage, AuditLog } from '../types';
 import LeafletMap from './LeafletMap';
+import ConnectionStatus from './ConnectionStatus';
+import CitizenChat from './CitizenChat';
 
 interface AdminPortalProps {
   citizens: Citizen[];
@@ -22,6 +24,17 @@ interface AdminPortalProps {
   weather: WeatherData;
   setWeather: React.Dispatch<React.SetStateAction<WeatherData>>;
   onLogout: () => void;
+  // NEW PROPS FOR SECURE SUPABASE DYNAMIC FLOW:
+  supabaseCitizens: SupabaseCitizen[];
+  selectedCitizenId: number | null;
+  setSelectedCitizenId: (id: number | null) => void;
+  chatMessages: EmergencyMessage[];
+  messagesLoading: boolean;
+  dashboardStats: any;
+  auditLogs: AuditLog[];
+  connectionStatus: 'realtime' | 'polling' | 'connecting';
+  onSendReply: (text: string) => Promise<any>;
+  onUpdateCitizenStatus: (citizenId: number, status: 'SAFE' | 'ALERTED' | 'URGENT' | 'RESOLVED') => Promise<any>;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -35,11 +48,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   shelters,
   logs,
   setLogs,
-  weather,
-  setWeather,
-  onLogout
+  weather: _weather,
+  setWeather: _setWeather,
+  onLogout,
+  supabaseCitizens,
+  selectedCitizenId,
+  setSelectedCitizenId,
+  chatMessages,
+  messagesLoading,
+  dashboardStats: _dashboardStats,
+  auditLogs: _auditLogs,
+  connectionStatus,
+  onSendReply,
+  onUpdateCitizenStatus
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'gis' | 'citizens' | 'alerts' | 'ai' | 'volunteers' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'gis' | 'citizens' | 'alerts' | 'ai' | 'volunteers' | 'analytics' | 'settings' | 'chat'>('dashboard');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
 
@@ -53,8 +76,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [newAlertSeverity, setNewAlertSeverity] = useState<'info' | 'warning' | 'critical'>('warning');
   const [newAlertCategory, setNewAlertCategory] = useState<'weather' | 'emergency' | 'volunteer' | 'ai'>('weather');
   const [newAlertMessage, setNewAlertMessage] = useState('');
-  const [newAlertRadius, setNewAlertRadius] = useState('500');
-  const [newAlertMinRisk, setNewAlertMinRisk] = useState('50');
+  const [newAlertRadius, _setNewAlertRadius] = useState('500');
+  const [newAlertMinRisk, _setNewAlertMinRisk] = useState('50');
 
   // Case details panel temporary states
   const [adminNoteInput, setAdminNoteInput] = useState('');
@@ -281,6 +304,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Users className="h-4 w-4" />
             <span>Citizen Matrix</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`w-full flex items-center justify-between px-md py-sm transition-all font-label-caps text-label-caps ${activeTab === 'chat'
+              ? 'bg-secondary-container text-on-secondary-container font-bold border-r-4 border-secondary'
+              : 'text-on-surface-variant hover:bg-surface-container-highest'
+              }`}
+          >
+            <div className="flex items-center gap-md">
+              <MessageSquare className="h-4 w-4" />
+              <span>Live Dispatch Chat</span>
+            </div>
+            <span className={`w-2 h-2 rounded-full ${
+              connectionStatus === 'realtime' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+            }`}></span>
           </button>
 
           <button
@@ -884,9 +923,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                   setCases(prev => [newCase, ...prev]);
                                   triggerToast(`Emergency Dispatch created for ${cit.name}`);
                                 }}
-                                className="px-3 py-1 bg-primary hover:bg-slate-800 text-on-primary rounded text-[10px] font-bold uppercase transition-colors"
+                                className="px-3 py-1 bg-primary hover:bg-slate-800 text-on-primary rounded text-[10px] font-bold uppercase transition-colors mr-2"
                               >
                                 Dispatch
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const subCitizen = supabaseCitizens.find(sc => sc.name === cit.name || sc.phone === cit.phone);
+                                  if (subCitizen) {
+                                    setSelectedCitizenId(subCitizen.id);
+                                    setActiveTab('chat');
+                                  } else {
+                                    triggerToast('Citizen not found in live database', 'warning');
+                                  }
+                                }}
+                                className="px-3 py-1 bg-secondary hover:bg-slate-800 text-white rounded text-[10px] font-bold uppercase transition-colors"
+                              >
+                                Chat
                               </button>
                             </td>
                           </tr>
@@ -1222,6 +1275,132 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     Save API Links
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: EMERGENCY DISPATCH CHAT */}
+          {activeTab === 'chat' && (
+            <div className="h-[calc(100vh-12rem)] flex gap-4">
+              {/* Citizens Column */}
+              <div className="w-1/3 border border-outline-variant bg-surface-container-lowest rounded-lg flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-outline-variant bg-surface shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-on-surface-variant" />
+                    <input
+                      type="text"
+                      placeholder="Search citizens..."
+                      value={citizenSearch}
+                      onChange={e => setCitizenSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 text-xs rounded border border-outline-variant bg-surface focus:outline-none w-full text-on-surface"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto divide-y divide-outline-variant/30">
+                  {supabaseCitizens
+                    .filter(c => c.name.toLowerCase().includes(citizenSearch.toLowerCase()))
+                    .map(c => {
+                      const isSelected = selectedCitizenId === c.id;
+                      const hasCase = c.cases && c.cases.some((cs: any) => cs.status !== 'CLOSED');
+                      
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelectedCitizenId(c.id)}
+                          className={`w-full text-left p-3 transition-all flex flex-col gap-1 ${
+                            isSelected 
+                              ? 'bg-secondary-container text-on-secondary-container border-l-4 border-secondary' 
+                              : 'hover:bg-surface-container-low text-on-surface'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <span className="font-bold text-xs">{c.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                              c.status === 'URGENT' 
+                                ? 'bg-red-100 text-red-800 animate-pulse' 
+                                : c.status === 'ALERTED' 
+                                  ? 'bg-amber-100 text-amber-800' 
+                                  : c.status === 'RESOLVED' 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {c.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-on-surface-variant font-mono-data">
+                            <span>Risk Score: {c.risk_score}%</span>
+                            {hasCase && <span className="text-secondary font-bold font-sans">Active Case</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  {supabaseCitizens.filter(c => c.name.toLowerCase().includes(citizenSearch.toLowerCase())).length === 0 && (
+                    <div className="p-4 text-center text-xs text-on-surface-variant">
+                      No citizens found
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Chat Column */}
+              <div className="flex-1 border border-outline-variant bg-surface-container-lowest rounded-lg flex flex-col overflow-hidden relative">
+                {selectedCitizenId ? (
+                  <>
+                    {/* Header */}
+                    {(() => {
+                      const selCitizen = supabaseCitizens.find(c => c.id === selectedCitizenId);
+                      if (!selCitizen) return null;
+                      return (
+                        <div className="p-3 border-b border-outline-variant bg-surface flex justify-between items-center shrink-0">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-sm text-primary">{selCitizen.name}</h3>
+                              <span className="text-[10px] font-mono-data text-on-surface-variant">ID: #{selCitizen.id}</span>
+                            </div>
+                            <p className="text-[10px] text-on-surface-variant mt-0.5">{selCitizen.address} | Elev: {selCitizen.elevation}m</p>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-on-surface-variant font-bold">Status Action:</span>
+                            <select
+                              value={selCitizen.status}
+                              onChange={(e) => {
+                                onUpdateCitizenStatus(selCitizen.id, e.target.value as any)
+                                  .then(() => triggerToast(`Updated safety status to ${e.target.value}`))
+                                  .catch((err) => triggerToast(`Failed to update: ${err.message}`, 'warning'));
+                              }}
+                              className="px-2 py-1 text-xs rounded border border-outline-variant bg-surface text-on-surface focus:outline-none font-bold"
+                            >
+                              <option value="SAFE">SAFE</option>
+                              <option value="ALERTED">ALERTED</option>
+                              <option value="URGENT">URGENT</option>
+                              <option value="RESOLVED">RESOLVED</option>
+                            </select>
+                            <ConnectionStatus status={connectionStatus} />
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Chat Messages */}
+                    <div className="flex-1 min-h-0 relative">
+                      {messagesLoading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-surface/50">
+                          <span className="text-xs text-on-surface-variant animate-pulse">Retrieving encrypted feeds...</span>
+                        </div>
+                      ) : (
+                        <CitizenChat messages={chatMessages} onSendMessage={onSendReply} />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-surface-container-low">
+                    <MessageSquare className="h-12 w-12 text-on-surface-variant opacity-40 mb-3 animate-pulse" />
+                    <h3 className="font-bold text-sm text-on-surface">No Conversation Selected</h3>
+                    <p className="text-xs text-on-surface-variant max-w-xs mt-1">Select a citizen from the matrix directory on the left to initiate live telemetry communications.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
