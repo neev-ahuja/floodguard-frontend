@@ -70,11 +70,11 @@ export const CitizenChat: React.FC<CitizenChatProps> = ({ messages, onSendMessag
 
             if (isSystem) {
               return (
-                <div key={m.id} className="flex justify-center my-2">
-                  <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-xl text-xs max-w-md flex gap-2 items-start shadow-sm">
-                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
-                    <div>
-                      <span className="font-semibold font-sans">SYSTEM UPDATE:</span> {m.message}
+                <div key={m.id} className="w-full flex justify-center my-3">
+                  <div className="w-full max-w-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 text-blue-900 dark:text-blue-200 px-4 py-2.5 rounded-xl text-xs flex gap-2.5 items-start shadow-sm">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+                    <div className="flex-1 min-w-0 leading-relaxed">
+                      <span className="font-bold font-sans tracking-wide">SYSTEM UPDATE:</span> {m.message}
                     </div>
                   </div>
                 </div>
@@ -84,10 +84,10 @@ export const CitizenChat: React.FC<CitizenChatProps> = ({ messages, onSendMessag
             return (
               <div
                 key={m.id}
-                className={`flex ${isCitizen ? 'justify-end' : 'justify-start'}`}
+                className={`w-full flex ${isCitizen ? 'justify-end' : 'justify-start'} my-1`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                  className={`max-w-[80%] min-w-[220px] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
                     isCitizen
                       ? 'bg-slate-900 text-white rounded-br-none'
                       : 'bg-white text-slate-800 rounded-bl-none border border-slate-200'
@@ -101,7 +101,7 @@ export const CitizenChat: React.FC<CitizenChatProps> = ({ messages, onSendMessag
                       {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="leading-relaxed whitespace-pre-wrap">{m.message}</p>
+                  <p className="leading-relaxed whitespace-pre-wrap min-w-0 break-words">{m.message}</p>
 
                   {/* Render AI Classification for citizen's own verification or interest */}
                   {isCitizen && m.metadata?.ai_classification && (
