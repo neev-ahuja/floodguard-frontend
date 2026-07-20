@@ -1413,12 +1413,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                 'X-N8N-Webhook-Secret': 'bc98694a-e60e-4cc0-a6cf-c6dba05f17d6'
                               },
                               body: JSON.stringify({
-                                date: new Date().toISOString().split('T')[0],
-                                max_temp_c: 33.5,
-                                min_temp_c: 24.0,
-                                precipitation_sum_mm: 52.4,
-                                rain_chance_percent: 88,
-                                weather_code: 63
+                                city: "Chennai",
+                                alert_status: "CRITICAL_FLOOD_RISK",
+                                is_flood_risk: true,
+                                severity: "HIGH",
+                                date: `=2026-07-20`,
+                                weather_details: {
+                                  weather_code: "=95",
+                                  rain_chance_percent: "=66",
+                                  precipitation_sum_mm: "=16",
+                                  max_temp_c: "=36",
+                                  min_temp_c: "=25.4"
+                                },
+                                alert_message: "CRITICAL: Severe thunderstorm and heavy rainfall expected. Localized flooding and road inundation are likely.",
+                                recommended_actions: [
+                                  "Avoid waterlogged roads and low-lying areas",
+                                  "Ensure drainage outlets around property are clear",
+                                  "Keep emergency devices fully charged"
+                                ]
                               })
                             });
                             const data = await res.json();

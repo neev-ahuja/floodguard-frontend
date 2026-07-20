@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   User, Home, MapPin, Bell, Phone, Heart, History, LogOut, 
-  AlertTriangle, Thermometer, Droplet, Wind, Waves, TrendingUp, ShieldCheck, 
+  AlertTriangle, Thermometer, Droplet, Wind, Waves, TrendingUp, ShieldCheck, CloudRain, 
   Send, Compass, PhoneCall, Plus, Trash2, CheckCircle2, Clock, 
   MessageSquare, MessageCircle
 } from 'lucide-react';
@@ -398,11 +398,16 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                 <div className="p-6 rounded-xl border border-outline-variant bg-surface-container-lowest flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase">
-                        Live Weather Station
+                      <span className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase flex items-center gap-1.5">
+                        <CloudRain className="w-3.5 h-3.5 text-primary" />
+                        Live Weather Station {weather.city ? `(${weather.city})` : ''}
                       </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded bg-primary/10 border border-outline-variant text-primary font-mono uppercase">
-                        Active Feed
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-mono uppercase font-bold border ${
+                        weather.isFloodRisk || weather.severity === 'HIGH'
+                          ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                          : 'bg-primary/10 border-outline-variant text-primary'
+                      }`}>
+                        {weather.alertStatus || 'Active Feed'}
                       </span>
                     </div>
 
@@ -436,12 +441,30 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                         </div>
                       </div>
                     </div>
+
+                    {weather.alertMessage && (
+                      <div className="mt-3 p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs text-red-700 dark:text-red-300">
+                        <span className="font-bold block mb-0.5">⚠️ Weather Advisory:</span>
+                        <p className="leading-snug">{weather.alertMessage}</p>
+                      </div>
+                    )}
+
+                    {weather.recommendedActions && weather.recommendedActions.length > 0 && (
+                      <div className="mt-2 text-[11px] text-on-surface-variant space-y-1">
+                        <span className="font-semibold text-xs text-on-surface">Recommended Actions:</span>
+                        <ul className="list-disc list-inside space-y-0.5 pl-1">
+                          {weather.recommendedActions.map((action, idx) => (
+                            <li key={idx} className="leading-tight">{action}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-outline-variant flex justify-between items-center text-[10px] text-on-surface-variant font-mono">
                     <span className="flex items-center gap-1">
                       <TrendingUp className="h-3 w-3 text-secondary animate-bounce" />
-                      Trend: Water Level Rising (+0.12m/hr)
+                      Trend: Water Level {weather.waterRiseTrend === 'rising' ? 'Rising' : weather.waterRiseTrend === 'falling' ? 'Falling' : 'Stable'}
                     </span>
                     <span>Ref: {weather.lastUpdated}</span>
                   </div>

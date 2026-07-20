@@ -106,6 +106,14 @@ export interface WeatherData {
   riverLevel: number;
   waterRiseTrend: 'rising' | 'falling' | 'stable';
   lastUpdated: string;
+  city?: string;
+  alertStatus?: string;
+  isFloodRisk?: boolean;
+  severity?: string;
+  alertMessage?: string;
+  recommendedActions?: string[];
+  weatherCode?: number;
+  rainChancePercent?: number;
 }
 
 export interface SupabaseCitizen {

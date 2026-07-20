@@ -7,7 +7,17 @@ export const initialWeatherData: WeatherData = {
   windSpeed: 28.4, // mph
   riverLevel: 6.85, // meters (critical threshold is 6.5m)
   waterRiseTrend: 'rising',
-  lastUpdated: '13:05:00 UTC'
+  lastUpdated: '13:05:00 UTC',
+  city: 'Chennai',
+  alertStatus: 'CRITICAL_FLOOD_RISK',
+  isFloodRisk: true,
+  severity: 'HIGH',
+  alertMessage: 'CRITICAL: Severe thunderstorm and heavy rainfall expected. Localized flooding and road inundation are likely.',
+  recommendedActions: [
+    'Avoid waterlogged roads and low-lying areas',
+    'Ensure drainage outlets around property are clear',
+    'Keep emergency devices fully charged'
+  ]
 };
 
 export const initialCitizens: Citizen[] = [
