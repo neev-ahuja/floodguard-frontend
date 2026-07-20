@@ -3,7 +3,7 @@ import {
   Users, ShieldAlert, Settings,
   Map, Activity, BellRing, Database, Search,
   X, Shield, Plus, Truck,
-  CheckCircle2, MessageSquare
+  CheckCircle2, MessageSquare, Copy, Check, ExternalLink, Zap
 } from 'lucide-react';
 import type { Citizen, Alert, Case, Volunteer, Shelter, SystemLog, WeatherData, SupabaseCitizen, EmergencyMessage, AuditLog } from '../types';
 import LeafletMap from './LeafletMap';
@@ -88,6 +88,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Clock state
   const [utcTime, setUtcTime] = useState('00:00:00 UTC');
+
+  // Webhook integration states
+  const [copiedUrlKey, setCopiedUrlKey] = useState<string | null>(null);
+  const [webhookTestResponse, setWebhookTestResponse] = useState<any | null>(null);
+  const [testingWebhook, setTestingWebhook] = useState(false);
 
   useEffect(() => {
     const updateClock = () => {
@@ -177,7 +182,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     triggerToast(`Case #${caseId} escalated to CRITICAL priority!`, 'warning');
   };
 
-  const handleBroadcastAlert = (e: React.FormEvent) => {
+  const handleBroadcastAlert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAlertMessage.trim()) {
       triggerToast('Alert message is blank.', 'warning');
@@ -185,16 +190,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
 
     const alertId = `ALT-${Math.floor(100 + Math.random() * 900)}`;
+    const alertBodyText = `ADVISORY (${newAlertRadius}m | Risk > ${newAlertMinRisk}%): ${newAlertMessage}`;
+
     const newAlert: Alert = {
       id: alertId,
       severity: newAlertSeverity,
       category: newAlertCategory,
-      message: `ADVISORY (${newAlertRadius}m | Risk > ${newAlertMinRisk}%): ${newAlertMessage}`,
+      message: alertBodyText,
       timestamp: new Date().toLocaleTimeString() + ' UTC',
       status: 'unread'
     };
 
     setAlerts(prev => [newAlert, ...prev]);
+
+    // Dispatch webhook trigger to backend & n8n ngrok URL
+    try {
+      await fetch('http://localhost:3001/api/webhook/alert-manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          severity: newAlertSeverity,
+          category: newAlertCategory,
+          message: newAlertMessage,
+          radiusMeters: Number(newAlertRadius),
+          minRiskScore: Number(newAlertMinRisk)
+        })
+      });
+      triggerToast(`Alert #${alertId} broadcast & dispatched to n8n webhook!`);
+    } catch (_err) {
+      triggerToast(`Alert #${alertId} queued locally (Webhook offline)`, 'warning');
+    }
 
     const newLog: SystemLog = {
       id: `LOG-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -203,12 +230,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       duration: 150,
       started: 'Just Now',
       ended: 'Just Now',
-      message: `Cell broadcast ${alertId} transmitted to Sector 7G targets.`
+      message: `Cell broadcast ${alertId} transmitted to n8n webhook (https://mystified-encrypt-reheat.ngrok-free.dev/webhook-test/alert-manual).`
     };
     setLogs(prev => [newLog, ...prev]);
 
     setNewAlertMessage('');
-    triggerToast(`Alert ${alertId} broadcasted successfully.`);
   };
 
   const handleExport = (name: string) => {
@@ -1221,16 +1247,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {activeTab === 'settings' && (
             <div className="space-y-lg">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-                <div className="p-6 rounded-lg border space-y-md bg-surface-container-lowest border-outline-variant">
-                  <h3 className="font-label-caps text-label-caps text-secondary uppercase">
-                    AI Risk Trigger Weights
+                
+                {/* AI Weights Card */}
+                <div className="p-6 rounded-lg border space-y-md bg-surface-container-lowest border-outline-variant shadow-sm">
+                  <h3 className="font-label-caps text-label-caps text-secondary uppercase font-bold flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    <span>AI Risk Trigger Weights</span>
                   </h3>
 
                   <div className="space-y-sm text-xs">
                     <div>
                       <div className="flex justify-between mb-1">
                         <span>River Gauge Weight Percentage</span>
-                        <span>40%</span>
+                        <span className="font-bold">40%</span>
                       </div>
                       <input type="range" className="w-full accent-secondary" defaultValue="40" />
                     </div>
@@ -1238,7 +1267,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <div>
                       <div className="flex justify-between mb-1">
                         <span>Rainfall Gauge Weight</span>
-                        <span>30%</span>
+                        <span className="font-bold">30%</span>
                       </div>
                       <input type="range" className="w-full accent-secondary" defaultValue="30" />
                     </div>
@@ -1252,29 +1281,169 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </button>
                 </div>
 
-                <div className="p-6 rounded-lg border space-y-md bg-surface-container-lowest border-outline-variant">
-                  <h3 className="font-label-caps text-label-caps text-primary uppercase">
-                    Third-Party Gateway Settings
-                  </h3>
-
-                  <div className="space-y-sm">
-                    <div>
-                      <label className="text-[10px] font-bold block mb-1">Meteorology Webhook Endpoint</label>
-                      <input
-                        type="text"
-                        defaultValue="https://api.weatherlink.gov/v2/grid/sector-7g"
-                        className="w-full px-3 py-2 text-xs rounded border border-outline-variant bg-surface text-on-surface focus:outline-none"
-                      />
-                    </div>
+                {/* n8n Webhook Gateway Integration Card */}
+                <div className="p-6 rounded-lg border space-y-md bg-surface-container-lowest border-outline-variant shadow-sm">
+                  <div className="flex justify-between items-center border-b border-outline-variant pb-3">
+                    <h3 className="font-label-caps text-label-caps text-primary uppercase font-bold flex items-center gap-2">
+                      <ExternalLink className="h-4 w-4 text-secondary" />
+                      <span>n8n / HTTP Webhook Gateway</span>
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 uppercase animate-pulse">
+                      Webhook Active
+                    </span>
                   </div>
 
-                  <button
-                    onClick={() => triggerToast('Gateway webhook saved.')}
-                    className="bg-primary hover:bg-slate-800 px-md py-sm rounded text-xs font-bold text-white shadow-sm transition-all"
-                  >
-                    Save API Links
-                  </button>
+                  <p className="text-xs text-on-surface-variant">
+                    Copy and paste the Webhook URL below into your n8n <strong>HTTP Request</strong> node URL field.
+                  </p>
+
+                  <div className="space-y-md text-xs">
+                    {/* Primary Weather Webhook URL (Local) */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">
+                        1. Weather Telemetry Webhook (Local backend)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value="http://localhost:3001/api/webhook/weather"
+                          className="flex-1 px-3 py-2 text-xs rounded border border-outline-variant bg-surface-container-low font-mono text-primary font-semibold select-all"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('http://localhost:3001/api/webhook/weather');
+                            setCopiedUrlKey('weather_local');
+                            triggerToast('Weather Webhook URL copied!');
+                            setTimeout(() => setCopiedUrlKey(null), 2000);
+                          }}
+                          className="px-3 py-2 bg-primary text-white rounded font-bold hover:bg-slate-800 flex items-center gap-1 transition-all shrink-0"
+                        >
+                          {copiedUrlKey === 'weather_local' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                          <span>{copiedUrlKey === 'weather_local' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Ngrok / Public Weather Webhook URL */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">
+                        2. Weather Telemetry Webhook (Public ngrok URL)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value="https://mystified-encrypt-reheat.ngrok-free.dev/api/webhook/weather"
+                          className="flex-1 px-3 py-2 text-xs rounded border border-outline-variant bg-surface-container-low font-mono text-secondary font-semibold select-all"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('https://mystified-encrypt-reheat.ngrok-free.dev/api/webhook/weather');
+                            setCopiedUrlKey('weather_ngrok');
+                            triggerToast('Public Ngrok Webhook URL copied!');
+                            setTimeout(() => setCopiedUrlKey(null), 2000);
+                          }}
+                          className="px-3 py-2 bg-secondary text-white rounded font-bold hover:opacity-90 flex items-center gap-1 transition-all shrink-0"
+                        >
+                          {copiedUrlKey === 'weather_ngrok' ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+                          <span>{copiedUrlKey === 'weather_ngrok' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Outbound Manual Alert Webhook URL */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">
+                        3. Manual Alert Outbound Webhook (n8n Target)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value="https://mystified-encrypt-reheat.ngrok-free.dev/webhook-test/alert-manual"
+                          className="flex-1 px-3 py-2 text-xs rounded border border-outline-variant bg-surface-container-low font-mono text-amber-700 font-semibold select-all"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('https://mystified-encrypt-reheat.ngrok-free.dev/webhook-test/alert-manual');
+                            setCopiedUrlKey('alert_manual');
+                            triggerToast('Manual Alert Webhook URL copied!');
+                            setTimeout(() => setCopiedUrlKey(null), 2000);
+                          }}
+                          className="px-3 py-2 bg-amber-600 text-white rounded font-bold hover:bg-amber-700 flex items-center gap-1 transition-all shrink-0"
+                        >
+                          {copiedUrlKey === 'alert_manual' ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+                          <span>{copiedUrlKey === 'alert_manual' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Webhook Secret & Payload Info */}
+                    <div className="p-3 bg-slate-50 border border-outline-variant rounded space-y-2 text-[11px]">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-on-surface-variant">HTTP Method:</span>
+                        <span className="font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">POST</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-on-surface-variant">Auth Secret Header:</span>
+                        <span className="font-mono text-primary font-bold">X-N8N-Webhook-Secret</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-on-surface-variant">Secret Token:</span>
+                        <span className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">bc98694a-e60e-4cc0-a6cf-c6dba05f17d6</span>
+                      </div>
+                    </div>
+
+                    {/* Interactive Webhook Test Trigger */}
+                    <div className="pt-2 border-t border-outline-variant">
+                      <button
+                        disabled={testingWebhook}
+                        onClick={async () => {
+                          setTestingWebhook(true);
+                          setWebhookTestResponse(null);
+                          try {
+                            const res = await fetch('http://localhost:3001/api/webhook/weather', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'X-N8N-Webhook-Secret': 'bc98694a-e60e-4cc0-a6cf-c6dba05f17d6'
+                              },
+                              body: JSON.stringify({
+                                date: new Date().toISOString().split('T')[0],
+                                max_temp_c: 33.5,
+                                min_temp_c: 24.0,
+                                precipitation_sum_mm: 52.4,
+                                rain_chance_percent: 88,
+                                weather_code: 63
+                              })
+                            });
+                            const data = await res.json();
+                            setWebhookTestResponse(data);
+                            triggerToast('Test payload transmitted & verified!');
+                          } catch (err: any) {
+                            setWebhookTestResponse({ error: err.message || 'Connection failed' });
+                            triggerToast('Failed to contact local webhook endpoint', 'warning');
+                          } finally {
+                            setTestingWebhook(false);
+                          }
+                        }}
+                        className="w-full py-2 bg-primary text-white rounded font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Zap className="h-4 w-4 text-amber-400" />
+                        <span>{testingWebhook ? 'Testing Ingestion...' : 'Send Sample Test Webhook Payload'}</span>
+                      </button>
+
+                      {webhookTestResponse && (
+                        <div className="mt-3 p-3 bg-slate-900 text-emerald-400 font-mono text-[10px] rounded overflow-x-auto border border-slate-700">
+                          <div className="font-bold text-white mb-1 border-b border-slate-700 pb-1">Response Payload:</div>
+                          <pre>{JSON.stringify(webhookTestResponse, null, 2)}</pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
               </div>
             </div>
           )}

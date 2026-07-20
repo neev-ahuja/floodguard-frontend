@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthFlow } from './components/AuthFlow';
 import { CitizenPortal } from './components/CitizenPortal';
 import { AdminPortal } from './components/AdminPortal';
@@ -230,6 +230,27 @@ const App = () => {
   const [shelters] = useState<Shelter[]>(initialShelters);
   const [logs, setLogs] = useState<SystemLog[]>(initialLogs);
   const [weather, setWeather] = useState<WeatherData>(initialWeatherData);
+
+  // Sync Live Weather Station Telemetry from backend webhook endpoint
+  useEffect(() => {
+    const syncWeather = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/webhook/weather');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data.temp === 'number') {
+            setWeather(data);
+          }
+        }
+      } catch (_err) {
+        // Silently handle polling fallbacks
+      }
+    };
+
+    syncWeather();
+    const interval = setInterval(syncWeather, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = async () => {
     try {
