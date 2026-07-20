@@ -3,12 +3,13 @@ import {
   User, Home, MapPin, Bell, Phone, Heart, History, LogOut, 
   AlertTriangle, Thermometer, Droplet, Wind, Waves, TrendingUp, ShieldCheck, CloudRain, 
   Send, Compass, PhoneCall, Plus, Trash2, CheckCircle2, Clock, 
-  MessageSquare, MessageCircle
+  MessageSquare, MessageCircle, RefreshCw
 } from 'lucide-react';
 import type { Citizen, Alert, Case, Shelter, WeatherData, EmergencyMessage } from '../types';
 import LeafletMap from './LeafletMap';
 import ConnectionStatus from './ConnectionStatus';
 import CitizenChat from './CitizenChat';
+import { fetchOpenMeteoWeather } from '../services/weatherService';
 
 interface CitizenPortalProps {
   citizen: Citizen;
@@ -19,6 +20,7 @@ interface CitizenPortalProps {
   setCases: React.Dispatch<React.SetStateAction<Case[]>>;
   shelters: Shelter[];
   weather: WeatherData;
+  setWeather?: React.Dispatch<React.SetStateAction<WeatherData>>;
   onLogout: () => void;
   // NEW PROPS FOR SECURE SUPABASE FLOW:
   chatMessages: EmergencyMessage[];
@@ -36,6 +38,7 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
   setCases: _setCases,
   shelters,
   weather,
+  setWeather,
   onLogout,
   chatMessages,
   onSendMessage,
@@ -46,6 +49,47 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
   const [safetyResponse, setSafetyResponse] = useState<'safe' | 'assist' | 'family' | 'evac' | 'no-resp' | null>(null);
   const [responseNotes, setResponseNotes] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
+  const [isRefreshingWeather, setIsRefreshingWeather] = useState(false);
+
+  const handleRefreshWeather = async () => {
+    setIsRefreshingWeather(true);
+    try {
+      const liveData = await fetchOpenMeteoWeather(citizen.lat || 13.0827, citizen.lng || 80.2707, 'Chennai');
+      if (setWeather) {
+        setWeather(liveData);
+      }
+
+      // Sync with backend weather endpoint if connected
+      try {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://floodguard-backend-2cri.onrender.com';
+        await fetch(`${baseUrl}/api/webhook/weather`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city: liveData.city,
+            max_temp_c: liveData.temp,
+            min_temp_c: liveData.temp - 3,
+            precipitation_sum_mm: liveData.rainfall,
+            rain_chance_percent: liveData.humidity,
+            weather_code: liveData.weatherCode,
+            alert_status: liveData.alertStatus,
+            is_flood_risk: liveData.isFloodRisk,
+            severity: liveData.severity,
+            alert_message: liveData.alertMessage,
+            recommended_actions: liveData.recommendedActions
+          })
+        });
+      } catch (_e) {
+        // Silently handle backend offline
+      }
+
+      triggerToast('Weather telemetry refreshed live from Open-Meteo!');
+    } catch (err: any) {
+      triggerToast(`Failed to refresh weather: ${err.message || 'Network error'}`, 'warning');
+    } finally {
+      setIsRefreshingWeather(false);
+    }
+  };
 
   // Shelter search and filter states
   const [shelterTypeFilter, setShelterTypeFilter] = useState<'all' | 'shelter' | 'hospital' | 'camp' | 'police'>('all');
@@ -397,18 +441,29 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                 {/* 3. Live Weather Station */}
                 <div className="p-6 rounded-xl border border-outline-variant bg-surface-container-lowest flex flex-col justify-between">
                   <div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
                       <span className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase flex items-center gap-1.5">
                         <CloudRain className="w-3.5 h-3.5 text-primary" />
                         Live Weather Station {weather.city ? `(${weather.city})` : ''}
                       </span>
-                      <span className={`text-[9px] px-2 py-0.5 rounded font-mono uppercase font-bold border ${
-                        weather.isFloodRisk || weather.severity === 'HIGH'
-                          ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                          : 'bg-primary/10 border-outline-variant text-primary'
-                      }`}>
-                        {weather.alertStatus || 'Active Feed'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleRefreshWeather}
+                          disabled={isRefreshingWeather}
+                          title="Refresh weather data from Open-Meteo API"
+                          className="px-2 py-0.5 rounded border border-outline-variant bg-surface hover:bg-surface-container-high text-[10px] font-bold text-primary flex items-center gap-1 transition-all disabled:opacity-50 shadow-sm"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isRefreshingWeather ? 'animate-spin text-secondary' : 'text-primary'}`} />
+                          <span>{isRefreshingWeather ? 'Syncing...' : 'Refresh'}</span>
+                        </button>
+                        <span className={`text-[9px] px-2 py-0.5 rounded font-mono uppercase font-bold border ${
+                          weather.isFloodRisk || weather.severity === 'HIGH'
+                            ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                            : 'bg-primary/10 border-outline-variant text-primary'
+                        }`}>
+                          {weather.alertStatus || 'Active Feed'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mt-3">

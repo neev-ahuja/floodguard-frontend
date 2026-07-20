@@ -15,7 +15,7 @@ import {
 } from './data/mockData';
 import type { Citizen, Alert, Case, Volunteer, Shelter, SystemLog, WeatherData } from './types';
 
-const CitizenPortalWrapper = ({ onLogout, alerts, setAlerts, cases, setCases, shelters, weather }: {
+const CitizenPortalWrapper = ({ onLogout, alerts, setAlerts, cases, setCases, shelters, weather, setWeather }: {
   onLogout: () => void;
   alerts: Alert[];
   setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
@@ -23,6 +23,7 @@ const CitizenPortalWrapper = ({ onLogout, alerts, setAlerts, cases, setCases, sh
   setCases: React.Dispatch<React.SetStateAction<Case[]>>;
   shelters: Shelter[];
   weather: WeatherData;
+  setWeather: React.Dispatch<React.SetStateAction<WeatherData>>;
 }) => {
   const { citizen, messages, connectionStatus, sendMessage, updateStatus, loading, error } = useCitizenData();
 
@@ -94,6 +95,7 @@ const CitizenPortalWrapper = ({ onLogout, alerts, setAlerts, cases, setCases, sh
       setCases={setCases}
       shelters={shelters}
       weather={weather}
+      setWeather={setWeather}
       onLogout={onLogout}
       chatMessages={messages}
       onSendMessage={sendMessage}
@@ -283,6 +285,7 @@ const App = () => {
           setCases={setCases}
           shelters={shelters}
           weather={weather}
+          setWeather={setWeather}
         />
       ) : (
         <AdminPortalWrapper

@@ -15,9 +15,31 @@ export const AuthFlow: React.FC<AuthFlowProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [warning, setWarning] = useState<string | null>(null);
 
-  // Automatically check if there is an active session on mount
+  // Automatically check URL query parameters or active session on mount
   useEffect(() => {
-    const checkActiveSession = async () => {
+    const checkActiveSessionAndUrlToken = async () => {
+      // 1. Direct one-click login via URL query parameter (e.g. ?q=ACCESS_TOKEN or ?token=... or ?access_token=...)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('q') || urlParams.get('token') || urlParams.get('access_token');
+
+      if (urlToken) {
+        setLoading(true);
+        setError('');
+        try {
+          await api.auth.validateCitizen(urlToken);
+          // Clean token from address bar without reloading
+          window.history.replaceState({}, document.title, window.location.pathname);
+          onLoginSuccess('citizen');
+          return;
+        } catch (err: any) {
+          console.error('[AuthFlow] URL direct token login failed:', err);
+          setError(err.message || 'Invalid or expired access link.');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // 2. Fallback to existing session check
       try {
         const session = await api.auth.getSession();
         if (session.role) {
@@ -27,7 +49,8 @@ export const AuthFlow: React.FC<AuthFlowProps> = ({ onLoginSuccess }) => {
         console.log('[AuthFlow] No active session found.');
       }
     };
-    checkActiveSession();
+
+    checkActiveSessionAndUrlToken();
   }, [onLoginSuccess]);
 
   const handleCitizenSubmit = async (e: React.FormEvent) => {
@@ -40,16 +63,16 @@ export const AuthFlow: React.FC<AuthFlowProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     setError('');
 
-    // Extract token if they pasted the full URL
+    // Extract token if they pasted a full URL with ?q= or ?token= or ?access_token=
     let token = tokenInput.trim();
     try {
       const url = new URL(token);
-      const urlToken = url.searchParams.get('token');
+      const urlToken = url.searchParams.get('q') || url.searchParams.get('token') || url.searchParams.get('access_token');
       if (urlToken) {
         token = urlToken;
       }
     } catch (_) {
-      // Not a valid URL, treat as direct token
+      // Not a valid URL, treat input directly as raw token string
     }
 
     try {
