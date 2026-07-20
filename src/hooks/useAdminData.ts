@@ -100,14 +100,18 @@ export function useAdminData() {
         )
         .subscribe();
 
-      // Subscribe to new emergency messages
+      // Subscribe to new chat messages
       messagesChannel = supabasePublic
         .channel('admin-messages-updates')
         .on(
           'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'emergency_messages' },
+          { event: 'INSERT', schema: 'public', table: 'chat_messages' },
           async (payload) => {
-            const newMessage = payload.new as EmergencyMessage;
+            const rawMessage = payload.new as any;
+            const newMessage: EmergencyMessage = {
+              ...rawMessage,
+              sender_type: rawMessage.sender || rawMessage.sender_type || 'CITIZEN',
+            };
             
             // If message is for currently viewed citizen, append it
             if (selectedCitizenIdRef.current === newMessage.citizen_id) {
@@ -117,16 +121,20 @@ export function useAdminData() {
               });
             }
             
-            // Re-fetch dashboard stats to update unread counts
+            // Re-fetch dashboard stats
             const statsRes = await api.admin.getDashboard();
             setDashboardStats(statsRes.stats);
           }
         )
         .on(
           'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'emergency_messages' },
+          { event: 'UPDATE', schema: 'public', table: 'chat_messages' },
           (payload) => {
-            const updatedMessage = payload.new as EmergencyMessage;
+            const rawMessage = payload.new as any;
+            const updatedMessage: EmergencyMessage = {
+              ...rawMessage,
+              sender_type: rawMessage.sender || rawMessage.sender_type || 'CITIZEN',
+            };
             if (selectedCitizenIdRef.current === updatedMessage.citizen_id) {
               setMessages((prev) =>
                 prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))

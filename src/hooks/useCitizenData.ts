@@ -55,29 +55,35 @@ export function useCitizenData() {
           {
             event: 'INSERT',
             schema: 'public',
-            table: 'emergency_messages',
+            table: 'chat_messages',
             filter: `citizen_id=eq.${citizen.id}`,
           },
           (payload) => {
-            const newMessage = payload.new as EmergencyMessage;
+            const rawMessage = payload.new as any;
+            const newMessage: EmergencyMessage = {
+              ...rawMessage,
+              sender_type: rawMessage.sender || rawMessage.sender_type || 'CITIZEN',
+            };
             setMessages((prev) => {
-              // Avoid duplicates
               if (prev.some((m) => m.id === newMessage.id)) return prev;
               return [...prev, newMessage];
             });
           }
         )
-        // Also subscribe to status history update
         .on(
           'postgres_changes',
           {
             event: 'UPDATE',
             schema: 'public',
-            table: 'emergency_messages',
+            table: 'chat_messages',
             filter: `citizen_id=eq.${citizen.id}`,
           },
           (payload) => {
-            const updatedMessage = payload.new as EmergencyMessage;
+            const rawMessage = payload.new as any;
+            const updatedMessage: EmergencyMessage = {
+              ...rawMessage,
+              sender_type: rawMessage.sender || rawMessage.sender_type || 'CITIZEN',
+            };
             setMessages((prev) =>
               prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))
             );
@@ -85,7 +91,7 @@ export function useCitizenData() {
         )
         .subscribe((status) => {
           if (status !== 'SUBSCRIBED') {
-            console.warn('[Realtime] Message subscription failed, status:', status);
+            console.warn('[Realtime] Message subscription status:', status);
           }
         });
 
