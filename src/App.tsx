@@ -235,7 +235,8 @@ const App = () => {
   useEffect(() => {
     const syncWeather = async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/webhook/weather');
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://floodguard-backend-2cri.onrender.com';
+        const res = await fetch(`${baseUrl}/api/webhook/weather`);
         if (res.ok) {
           const data = await res.json();
           if (data && typeof data.temp === 'number') {

@@ -205,7 +205,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
     // Dispatch webhook trigger to backend & n8n ngrok URL
     try {
-      await fetch('http://localhost:3001/api/webhook/alert-manual', {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      await fetch(`${baseUrl}/api/webhook/alert-manual`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1298,21 +1299,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </p>
 
                   <div className="space-y-md text-xs">
-                    {/* Primary Weather Webhook URL (Local) */}
+                    {/* Primary Weather Webhook URL */}
                     <div>
                       <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">
-                        1. Weather Telemetry Webhook (Local backend)
+                        1. Weather Telemetry Webhook (Backend Endpoint)
                       </label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           readOnly
-                          value="http://localhost:3001/api/webhook/weather"
+                          value={`${import.meta.env.VITE_API_BASE_URL || 'https://floodguard-backend-2cri.onrender.com'}/api/webhook/weather`}
                           className="flex-1 px-3 py-2 text-xs rounded border border-outline-variant bg-surface-container-low font-mono text-primary font-semibold select-all"
                         />
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText('http://localhost:3001/api/webhook/weather');
+                            const url = `${import.meta.env.VITE_API_BASE_URL || 'https://floodguard-backend-2cri.onrender.com'}/api/webhook/weather`;
+                            navigator.clipboard.writeText(url);
                             setCopiedUrlKey('weather_local');
                             triggerToast('Weather Webhook URL copied!');
                             setTimeout(() => setCopiedUrlKey(null), 2000);
@@ -1403,7 +1405,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           setTestingWebhook(true);
                           setWebhookTestResponse(null);
                           try {
-                            const res = await fetch('http://localhost:3001/api/webhook/weather', {
+                            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+                            const res = await fetch(`${baseUrl}/api/webhook/weather`, {
                               method: 'POST',
                               headers: {
                                 'Content-Type': 'application/json',
